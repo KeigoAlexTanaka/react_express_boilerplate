@@ -82,13 +82,17 @@ app.get('/', async (req, res) => {
 
 app.listen(PORT, () => console.log(`Example app listening on port ${PORT}!`))
 ```
+> This app starts a server and listens on port 3000 for connections. The app responds with “Hello World!” for requests to the root URL (/) or route. For every other path, it will respond with a **404 Not Found**.
+
 
 7. In the `package.json`, add a scripts property that creates a command to run the server:
 
 ```js
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "db:init": "dropdb --if-exists database_name_here && createdb database_name_here",
+    "db:reset": "resetDb.js"
   },
 ```
 
@@ -98,7 +102,7 @@ app.listen(PORT, () => console.log(`Example app listening on port ${PORT}!`))
 $ npm run dev
 ```
 
-then, visit [localhost:3000](http://localhost:3000).
+then, load [localhost:3000](http://localhost:3000) in the browser to see the output.
 
 9. At this point, the browser should return:
 
@@ -110,6 +114,26 @@ hello: "world"
 
 ## Middleware Setup
 
+An Express application is essentially a series of middleware function calls. [Middleware](https://expressjs.com/en/guide/using-middleware.html) functions are functions that have access to the request object (req), the response object (res), and the next middleware function in the application’s request-response cycle. The next middleware function is commonly denoted by a variable named next.
+
+- [**Morgan**](https://www.npmjs.com/package/morgan) is used for logging request details. You might think of it as a helper that collects logs from your server, such as your request logs. 
+
+ Create a new morgan logger middleware function using the given format and options. The `format` argument may be a string of a predefined name (see documentaiton for more details). We will be using `dev` which provides output colored by response status for development use.
+
+- Use [**bodyParser**](https://github.com/expressjs/body-parser) if you want form data to be available in `req.body`. `bodyParser.json()` returns middleware that only parses json and only looks at requests where the Content-Type header matches the type option. A new body object containing the parsed data is populated on the request object after the middleware (i.e. `req.body`).
+
+- This simeple use of [cors](https://expressjs.com/en/resources/middleware/cors.html) enables *all* CORS requests.
+
+```js
+const logger = require('morgan');
+const bodyParser = require('body-parser');
+
+app.use(cors())
+app.use(bodyParser.json())
+
+// log requests to the console in dev mode
+app.use(logger(‘dev’));
+```
 
 ## Sequelize Setup
 
@@ -121,10 +145,10 @@ $ touch models.js
 
 In `models.js`, initialize the sequelize module using the global require function. We capitalize Sequelize to signify that in JS, this is a constructor function and should be called using the new operator.
 
-This constructor function returns an object which represents a connection to the database. The first object is the name of the database that sequelize will connect to, in this case called database_name_here. We’re going to connect to the database using postgres and make sure all tables are defined with an underscore and always returns information.
+This constructor function returns an object which represents a connection to the database. The first object is the name of the database that sequelize will connect to, in this case called `database_name_here`. We’re going to connect to the database using postgres and make sure all tables are defined with an underscore and always returns information.
 
 ```js
-const db = require('sequelize');
+const Sequelize = require('sequelize');
 
 const db = new Sequelize({
   database: 'database_name_here',
@@ -138,7 +162,11 @@ const db = new Sequelize({
 
 ## Define Models
 
-Models are defined with connection.define('book', {attributes}, {options}).
+Models are defined with:
+
+```
+connection.define('book', {attributes}, {options})
+```
 
 We do this using the connection object the Sequelize constructor object returned by placing the define function on the connection object. The model takes two arguments: (1) the name of the model -- in this case book -- and (2) an object that represents properties of the model -- in this case, title, author, and description.
 
@@ -169,9 +197,50 @@ module.exports = {
 }
 ```
 
+#### Database Synchronization
+
+1. Create a file called `resetDb.js`:
+
+```
+$ touch resetDb.js
+```
+
+2. Import the models and set up a function that will sync our models in the database and then close the connection. Because synchronizing and dropping all of your tables might be a lot of code to write, you can let Sequelize do the work for you:
+
+```js
+const { db } = require('../models');
+
+
+const resetDb = async () => {
+  try {
+    db.sync({ force: true }); <------ force sync all models
+    console.log('noice, database synced');
+  } catch (e) {
+    console.log(e);
+  } finally {
+    process.exit();
+  }
+}
+
+resetDb();
+```
+
+The sync function, which creates the tables behind the scenes may take a long time to finish doing its job and we don’t want to try and attempt to insert data into a table that does not exist. The only way to know that the tables have been generated is to insert your record from within a callback function.
+
+The `process.exit` function exits from the current Node.js process. It is a global variable that can be accessed from anywhere inside a Node.js program without using require to import it.
+
+Now, run the following scripts we created earlier in the project:
+
+```bash
+$ npm db:init
+$ npm db:reset
+```
+
+The database is now set up!
+
 ## React Setup
 
-1. First, let's create the React app.
+1. Create a new React app.
 
 ```bash
 $ npm init react-app client
@@ -224,7 +293,7 @@ class App extends Component {
 
 export default App;
 ```
-and now you’re ready to move on!
+You’re ready to move on!
 
 ### Resources
 
